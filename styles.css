@@ -1,0 +1,455 @@
+:root {
+  color-scheme: light;
+  --ink: #18202b;
+  --muted: #667280;
+  --line: #dde4ea;
+  --surface: #ffffff;
+  --wash: #f4f7f8;
+  --accent: #0f766e;
+  --accent-dark: #0a5d57;
+  --amber: #b45309;
+  --danger: #b42318;
+  --shadow: 0 18px 42px rgba(21, 32, 43, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background: linear-gradient(135deg, #f7faf9 0%, #eef4f5 48%, #f8f5ef 100%);
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  padding: 26px;
+  border-right: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(18px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--accent);
+  font-weight: 800;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.05rem;
+}
+
+h2 {
+  font-size: 1.15rem;
+}
+
+p,
+small,
+.search span,
+.stat-grid span,
+.list-header {
+  color: var(--muted);
+}
+
+.search {
+  display: grid;
+  gap: 7px;
+  font-size: 0.86rem;
+}
+
+input,
+textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
+}
+
+input {
+  height: 42px;
+  padding: 0 12px;
+}
+
+textarea {
+  min-height: 120px;
+  padding: 12px;
+  resize: vertical;
+}
+
+input:focus,
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stat-grid div {
+  display: grid;
+  gap: 2px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.stat-grid strong {
+  font-size: 1.45rem;
+}
+
+.list-header,
+.panel-title,
+.detail-actions,
+.capture-actions,
+.ocr-status {
+  display: flex;
+  align-items: center;
+}
+
+.list-header,
+.panel-title,
+.ocr-status {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--ink);
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.card-list {
+  display: grid;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.list-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: left;
+  background: var(--surface);
+}
+
+.list-item.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.list-item strong,
+.list-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-item span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.workspace {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 20px;
+  min-width: 0;
+  padding: 26px;
+}
+
+.capture-panel,
+.detail-panel {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--shadow);
+}
+
+.capture-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.panel-title p {
+  margin-top: 4px;
+  font-size: 0.92rem;
+}
+
+.segmented {
+  display: flex;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--wash);
+}
+
+.segmented button {
+  min-width: 74px;
+  height: 34px;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.segmented button.active {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 1px 6px rgba(21, 32, 43, 0.12);
+}
+
+.input-pane {
+  display: none;
+}
+
+.input-pane.active {
+  display: grid;
+  gap: 12px;
+}
+
+video {
+  width: 100%;
+  max-height: 330px;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background: #111820;
+  object-fit: cover;
+}
+
+.capture-actions,
+.detail-actions {
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.primary,
+.secondary,
+.danger {
+  min-height: 40px;
+  padding: 0 15px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.primary {
+  color: #fff;
+  background: var(--accent);
+}
+
+.primary:hover {
+  background: var(--accent-dark);
+}
+
+.secondary {
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.danger {
+  color: var(--danger);
+  border: 1px solid rgba(180, 35, 24, 0.25);
+  background: #fff8f7;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.drop-zone {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 190px;
+  border: 1px dashed #9aa8b5;
+  border-radius: 8px;
+  background: var(--wash);
+  text-align: center;
+}
+
+.drop-zone input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+}
+
+.drop-zone span {
+  font-weight: 800;
+}
+
+.preview-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(280px, 1.1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+#businessCardImage {
+  width: 100%;
+  min-height: 190px;
+  max-height: 300px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--wash);
+  object-fit: contain;
+}
+
+.ocr-box {
+  display: grid;
+  gap: 10px;
+}
+
+#ocrProgress {
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.form-grid label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.form-grid .full {
+  grid-column: 1 / -1;
+}
+
+.toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 12px 14px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(24, 32, 43, 0.92);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (max-width: 920px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .card-list {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .sidebar,
+  .workspace {
+    padding: 16px;
+  }
+
+  .panel-title,
+  .preview-row,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-title {
+    align-items: stretch;
+  }
+
+  .capture-actions,
+  .detail-actions,
+  .segmented {
+    width: 100%;
+  }
+
+  .capture-actions,
+  .detail-actions {
+    justify-content: stretch;
+  }
+
+  .capture-actions button,
+  .detail-actions button,
+  .segmented button {
+    flex: 1;
+  }
+}
