@@ -16,6 +16,8 @@ const elements = {
   rawText: document.querySelector("#rawText"),
   parseButton: document.querySelector("#parseButton"),
   cardForm: document.querySelector("#cardForm"),
+  company: document.querySelector("#company"),
+  companyCandidates: document.querySelector("#companyCandidates"),
   saveButton: document.querySelector("#saveButton"),
   deleteButton: document.querySelector("#deleteButton"),
   newCardButton: document.querySelector("#newCardButton"),
@@ -65,7 +67,11 @@ async function startCamera() {
       stopCamera();
     }
     cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 1600 } },
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+      },
       audio: false,
     });
     elements.cameraPreview.srcObject = cameraStream;
@@ -73,7 +79,7 @@ async function startCamera() {
     setStatus("カメラ準備完了", "");
   } catch (error) {
     setStatus("カメラを起動できません", "");
-    showToast("ブラウザのカメラ許可、またはlocalhostでの起動を確認してください。");
+    showToast("ブラウザのカメラ許可、またはHTTPSでの起動を確認してください。");
   }
 }
 
@@ -90,7 +96,7 @@ function capturePhoto() {
   canvas.height = video.videoHeight || 720;
   const context = canvas.getContext("2d");
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
   setImageAndRunOcr(dataUrl);
 }
 
@@ -115,52 +121,142 @@ async function setImageAndRunOcr(dataUrl) {
   }
 
   try {
+    setStatus("画像補正中", "");
+    const preparedImage = await prepareImageForOcr(dataUrl);
     setStatus("OCR解析中", "0%");
-    const result = await Tesseract.recognize(dataUrl, "jpn+eng", {
+    const result = await Tesseract.recognize(preparedImage, "jpn+eng", {
+      preserve_interword_spaces: "1",
       logger(message) {
         if (message.status === "recognizing text") {
           elements.ocrProgress.textContent = `${Math.round(message.progress * 100)}%`;
         }
       },
     });
-    const text = result.data.text.trim();
+    const text = normalizeOcrText(result.data.text);
     elements.rawText.value = text;
     ensureDraftCard().rawText = text;
     setStatus("OCR完了", "");
     applyParsedText(text);
   } catch (error) {
     setStatus("OCR失敗", "");
-    showToast("OCRに失敗しました。画像を明るく撮り直すか、テキストを手入力してください。");
+    showToast("OCRに失敗しました。明るい場所で名刺を大きく撮り直してください。");
   }
+}
+
+function prepareImageForOcr(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(2.4, Math.max(1.2, 2200 / Math.max(image.width, image.height)));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.width * scale);
+      canvas.height = Math.round(image.height * scale);
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 128));
+        data[i] = contrasted;
+        data[i + 1] = contrasted;
+        data[i + 2] = contrasted;
+      }
+      context.putImageData(imageData, 0, 0);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
 }
 
 function applyParsedText(text) {
   const parsed = parseBusinessCard(text);
   fields.forEach((field) => {
-    if (parsed[field]) {
+    if (field !== "company" && parsed[field]) {
       document.querySelector(`#${field}`).value = parsed[field];
     }
   });
+
+  if (parsed.company && parsed.companyConfidence >= 8) {
+    elements.company.value = parsed.company;
+  } else if (!elements.company.value.trim()) {
+    elements.company.value = "";
+  }
+
+  renderCompanyCandidates(parsed.companyCandidates);
   elements.rawText.value = text;
-  showToast("テキストから候補を抽出しました。");
+  showToast(parsed.company ? "会社名候補を抽出しました。確認して保存してください。" : "OCR結果を抽出しました。会社名は候補から選んでください。");
+}
+
+function renderCompanyCandidates(candidates) {
+  elements.companyCandidates.innerHTML = "";
+  candidates.slice(0, 5).forEach((candidate) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "candidate-chip";
+    button.textContent = candidate.text;
+    button.title = `会社名候補: ${candidate.text}`;
+    button.addEventListener("click", () => {
+      elements.company.value = candidate.text;
+      showToast("会社名を候補から入力しました。");
+    });
+    elements.companyCandidates.append(button);
+  });
 }
 
 function parseBusinessCard(text) {
-  const lines = text
+  const lines = normalizeOcrText(text)
     .split(/\r?\n/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
+    .map(cleanLine)
     .filter(Boolean);
   const joined = lines.join(" ");
   const email = joined.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? "";
-  const website =
-    lines.find((line) => !line.includes("@") && /(?:https?:\/\/|www\.)[A-Z0-9.-]+\.[A-Z]{2,}(?:\/\S*)?/i.test(line)) ?? "";
+  const website = findWebsite(lines);
   const phone = joined.match(/(?:\+?\d{1,3}[-\s.]*)?(?:\(?0\d{1,4}\)?[-\s.]*)?\d{2,4}[-\s.]\d{2,4}[-\s.]\d{3,4}/)?.[0] ?? "";
   const address = lines.find((line) => /〒|都|道|府|県|市|区|町|丁目|番地|-\d/.test(line) && !line.includes("@")) ?? "";
-  const company = lines.find((line) => /(株式会社|有限会社|合同会社|Inc\.?|Ltd\.?|Co\.?|Corporation|Company|LLC)/i.test(line)) ?? "";
-  const title = lines.find((line) => /(代表|取締役|部長|課長|主任|Manager|Director|CEO|CTO|Sales|Marketing|Engineer)/i.test(line)) ?? "";
+  const title = lines.find((line) => /(代表|取締役|部長|課長|主任|係長|Manager|Director|CEO|CTO|Sales|Marketing|Engineer)/i.test(line)) ?? "";
+  const companyCandidates = findCompanyCandidates(lines, { email, phone, website, address, title });
+  const company = companyCandidates[0]?.text ?? "";
+  const companyConfidence = companyCandidates[0]?.score ?? 0;
   const name = findLikelyName(lines, { email, phone, website, address, company, title });
 
-  return { name, company, title, email, phone, website, address };
+  return { name, company, companyConfidence, companyCandidates, title, email, phone, website, address };
+}
+
+function findWebsite(lines) {
+  const explicit = lines.find((line) => !line.includes("@") && /(?:https?:\/\/|www\.)[A-Z0-9.-]+\.[A-Z]{2,}(?:\/\S*)?/i.test(line));
+  if (explicit) return explicit.match(/(?:https?:\/\/|www\.)[A-Z0-9.-]+\.[A-Z]{2,}(?:\/\S*)?/i)?.[0] ?? "";
+  return "";
+}
+
+function findCompanyCandidates(lines, known) {
+  const companyWords = /(株式会社|有限会社|合同会社|一般社団法人|公益社団法人|医療法人|学校法人|Inc\.?|Ltd\.?|Co\.?|Corporation|Company|LLC|GmbH|Group|Holdings)/i;
+  const weakCompanyWords = /(事務所|研究所|制作|デザイン|システム|ソリューション|サービス|商事|工業|産業|不動産|クリニック|大学|学院|銀行|協会|センター|LAB|STUDIO|DESIGN|SYSTEM|SOLUTION)/i;
+  const rejectedValues = new Set(Object.values(known).filter(Boolean));
+
+  return lines
+    .map((line, index) => {
+      const text = cleanLine(line);
+      let score = 0;
+      if (!text || rejectedValues.has(text)) return null;
+      if (text.includes("@") || /TEL|FAX|携帯|Mobile|Phone|E-mail|Email/i.test(text)) return null;
+      if (/https?:|www\.|^\d+$/.test(text)) return null;
+      if (companyWords.test(text)) score += 10;
+      if (weakCompanyWords.test(text)) score += 4;
+      if (/[A-Z][A-Z0-9&., -]{2,}/.test(text)) score += 2;
+      if (/[\u4e00-\u9fff]{2,}/.test(text)) score += 2;
+      if (index <= 3) score += 3;
+      if (text.length >= 4 && text.length <= 34) score += 2;
+      if (/\d{3,}/.test(text)) score -= 4;
+      if (/(代表|取締役|部長|課長|主任|Manager|Director|CEO|CTO)/i.test(text)) score -= 5;
+      return score > 1 ? { text, score } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
 }
 
 function findLikelyName(lines, known) {
@@ -172,6 +268,22 @@ function findLikelyName(lines, known) {
     return line.length >= 2 && line.length <= 28;
   });
   return candidates[0] ?? "";
+}
+
+function normalizeOcrText(text) {
+  return text
+    .replace(/[|｜]/g, "I")
+    .replace(/[―–—]/g, "-")
+    .replace(/[　\t]+/g, " ")
+    .replace(/\r/g, "")
+    .trim();
+}
+
+function cleanLine(line) {
+  return line
+    .replace(/\s+/g, " ")
+    .replace(/^[・:：,，.。-\s]+|[・:：,，.。-\s]+$/g, "")
+    .trim();
 }
 
 function saveActiveCard() {
@@ -237,6 +349,7 @@ function loadCard(id) {
   });
   elements.rawText.value = card.rawText ?? "";
   elements.businessCardImage.src = card.image ?? "";
+  renderCompanyCandidates([]);
   render();
 }
 
@@ -246,6 +359,7 @@ function resetForm() {
   });
   elements.rawText.value = "";
   elements.businessCardImage.removeAttribute("src");
+  renderCompanyCandidates([]);
 }
 
 function render() {
