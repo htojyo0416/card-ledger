@@ -371,6 +371,20 @@ button:disabled {
   gap: 10px;
 }
 
+.ai-ocr-settings {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.ai-ocr-settings label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
 #ocrProgress {
   color: var(--amber);
   font-variant-numeric: tabular-nums;
@@ -481,8 +495,13 @@ button:disabled {
   }
 
   .capture-actions button,
+  .file-button,
   .detail-actions button,
   .segmented button {
     flex: 1;
+  }
+
+  .ai-ocr-settings {
+    grid-template-columns: 1fr;
   }
 }

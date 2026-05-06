@@ -15,6 +15,9 @@ const elements = {
   ocrProgress: document.querySelector("#ocrProgress"),
   rawText: document.querySelector("#rawText"),
   parseButton: document.querySelector("#parseButton"),
+  aiEndpoint: document.querySelector("#aiEndpoint"),
+  saveAiEndpointButton: document.querySelector("#saveAiEndpointButton"),
+  aiOcrButton: document.querySelector("#aiOcrButton"),
   company: document.querySelector("#company"),
   companyCandidates: document.querySelector("#companyCandidates"),
   saveButton: document.querySelector("#saveButton"),
@@ -41,6 +44,7 @@ let cameraStream = null;
 let toastTimer = null;
 
 registerServiceWorker();
+elements.aiEndpoint.value = localStorage.getItem("card-ledger.aiEndpoint") || "";
 render();
 if (activeId) {
   loadCard(activeId);
@@ -54,6 +58,8 @@ elements.startCameraButton.addEventListener("click", startCamera);
 elements.captureButton.addEventListener("click", capturePhoto);
 elements.imageInput.addEventListener("change", handleImageUpload);
 elements.parseButton.addEventListener("click", () => applyParsedText(elements.rawText.value));
+elements.saveAiEndpointButton.addEventListener("click", saveAiEndpoint);
+elements.aiOcrButton.addEventListener("click", runAiOcr);
 elements.saveButton.addEventListener("click", saveActiveCard);
 elements.deleteButton.addEventListener("click", deleteActiveCard);
 elements.newCardButton.addEventListener("click", createBlankCard);
@@ -114,6 +120,11 @@ async function setImageAndRunOcr(dataUrl) {
   persist();
   render();
 
+  if (elements.aiEndpoint.value.trim()) {
+    await runAiOcr();
+    return;
+  }
+
   if (!window.Tesseract) {
     setStatus("OCR not loaded", "");
     showToast("OCR library did not load. You can paste text and extract fields.");
@@ -138,6 +149,65 @@ async function setImageAndRunOcr(dataUrl) {
     setStatus("OCR failed", "");
     showToast("OCR failed. Retake the card brighter, larger, and as flat as possible.");
   }
+}
+
+function saveAiEndpoint() {
+  localStorage.setItem("card-ledger.aiEndpoint", elements.aiEndpoint.value.trim());
+  showToast("AI OCR URL saved.");
+}
+
+async function runAiOcr() {
+  const endpoint = elements.aiEndpoint.value.trim();
+  const image = ensureDraftCard().image || elements.businessCardImage.src;
+  if (!endpoint) {
+    showToast("Set the AI OCR URL first.");
+    return;
+  }
+  if (!image) {
+    showToast("Take or upload a business card image first.");
+    return;
+  }
+
+  try {
+    setStatus("AI OCR running", "");
+    elements.aiOcrButton.disabled = true;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image }),
+    });
+    if (!response.ok) throw new Error(`AI OCR failed: ${response.status}`);
+    const data = await response.json();
+    fillFieldsFromAi(data);
+    elements.rawText.value = data.rawText || JSON.stringify(data, null, 2);
+    ensureDraftCard().rawText = elements.rawText.value;
+    setStatus("AI OCR done", "");
+    showToast("AI OCR completed. Check the fields before saving.");
+  } catch {
+    setStatus("AI OCR failed", "");
+    showToast("AI OCR failed. Check the Worker URL and API key.");
+  } finally {
+    elements.aiOcrButton.disabled = false;
+  }
+}
+
+function fillFieldsFromAi(data) {
+  const mapping = {
+    name: data.name,
+    company: data.company,
+    title: data.title,
+    email: data.email,
+    phone: data.phone,
+    website: data.website,
+    address: data.address,
+    notes: data.notes,
+  };
+  Object.entries(mapping).forEach(([field, value]) => {
+    if (typeof value === "string" && value.trim()) {
+      document.querySelector(`#${field}`).value = value.trim();
+    }
+  });
+  renderCompanyCandidates(data.company ? [{ text: data.company, score: 99 }] : []);
 }
 
 function recognizeImage(image, index) {

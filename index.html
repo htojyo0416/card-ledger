@@ -83,6 +83,14 @@
           <div class="preview-row">
             <img id="businessCardImage" alt="名刺プレビュー" />
             <div class="ocr-box">
+              <div class="ai-ocr-settings">
+                <label>
+                  AI OCR URL
+                  <input id="aiEndpoint" type="url" placeholder="https://your-worker.example.workers.dev" />
+                </label>
+                <button id="saveAiEndpointButton" class="secondary" type="button">URL保存</button>
+                <button id="aiOcrButton" class="primary" type="button">AI OCRで解析</button>
+              </div>
               <div class="ocr-status">
                 <span id="ocrState">画像待ち</span>
                 <span id="ocrProgress"></span>

@@ -1,4 +1,4 @@
-const cacheName = "card-ledger-v3";
+const cacheName = "card-ledger-v4";
 const appShell = [
   "./",
   "./index.html",
