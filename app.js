@@ -15,7 +15,6 @@ const elements = {
   ocrProgress: document.querySelector("#ocrProgress"),
   rawText: document.querySelector("#rawText"),
   parseButton: document.querySelector("#parseButton"),
-  cardForm: document.querySelector("#cardForm"),
   company: document.querySelector("#company"),
   companyCandidates: document.querySelector("#companyCandidates"),
   saveButton: document.querySelector("#saveButton"),
@@ -29,6 +28,13 @@ const elements = {
 };
 
 const fields = ["name", "company", "title", "email", "phone", "website", "address", "notes"];
+const jp = {
+  company: "\\u682a\\u5f0f\\u4f1a\\u793e|\\u6709\\u9650\\u4f1a\\u793e|\\u5408\\u540c\\u4f1a\\u793e|\\u4e00\\u822c\\u793e\\u56e3\\u6cd5\\u4eba|\\u516c\\u76ca\\u793e\\u56e3\\u6cd5\\u4eba|\\u533b\\u7642\\u6cd5\\u4eba|\\u5b66\\u6821\\u6cd5\\u4eba",
+  title: "\\u4ee3\\u8868|\\u53d6\\u7de0\\u5f79|\\u90e8\\u9577|\\u8ab2\\u9577|\\u4e3b\\u4efb|\\u4fc2\\u9577|\\u793e\\u9577",
+  address: "\\u3012|\\u90fd|\\u9053|\\u5e9c|\\u770c|\\u5e02|\\u533a|\\u753a|\\u4e01\\u76ee|\\u756a\\u5730",
+  weakCompany: "\\u4e8b\\u52d9\\u6240|\\u7814\\u7a76\\u6240|\\u5236\\u4f5c|\\u30c7\\u30b6\\u30a4\\u30f3|\\u30b7\\u30b9\\u30c6\\u30e0|\\u30bd\\u30ea\\u30e5\\u30fc\\u30b7\\u30e7\\u30f3|\\u30b5\\u30fc\\u30d3\\u30b9|\\u5546\\u4e8b|\\u5de5\\u696d|\\u7523\\u696d|\\u4e0d\\u52d5\\u7523|\\u30af\\u30ea\\u30cb\\u30c3\\u30af|\\u5927\\u5b66|\\u5b66\\u9662|\\u9280\\u884c|\\u5354\\u4f1a|\\u30bb\\u30f3\\u30bf\\u30fc",
+};
+
 let cards = loadCards();
 let activeId = cards[0]?.id ?? null;
 let cameraStream = null;
@@ -63,23 +69,17 @@ function setInputMode(mode) {
 
 async function startCamera() {
   try {
-    if (cameraStream) {
-      stopCamera();
-    }
+    if (cameraStream) stopCamera();
     cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-      },
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     });
     elements.cameraPreview.srcObject = cameraStream;
     elements.captureButton.disabled = false;
-    setStatus("カメラ準備完了", "");
-  } catch (error) {
-    setStatus("カメラを起動できません", "");
-    showToast("ブラウザのカメラ許可、またはHTTPSでの起動を確認してください。");
+    setStatus("Camera ready", "");
+  } catch {
+    setStatus("Camera unavailable", "");
+    showToast("Use the high-resolution camera button or open this app over HTTPS.");
   }
 }
 
@@ -96,8 +96,7 @@ function capturePhoto() {
   canvas.height = video.videoHeight || 720;
   const context = canvas.getContext("2d");
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
-  setImageAndRunOcr(dataUrl);
+  setImageAndRunOcr(canvas.toDataURL("image/jpeg", 0.95));
 }
 
 function handleImageUpload(event) {
@@ -106,6 +105,7 @@ function handleImageUpload(event) {
   const reader = new FileReader();
   reader.onload = () => setImageAndRunOcr(String(reader.result));
   reader.readAsDataURL(file);
+  event.target.value = "";
 }
 
 async function setImageAndRunOcr(dataUrl) {
@@ -115,62 +115,98 @@ async function setImageAndRunOcr(dataUrl) {
   render();
 
   if (!window.Tesseract) {
-    setStatus("OCRライブラリ未読込", "");
-    showToast("OCRが読み込めませんでした。テキスト欄に入力して再抽出できます。");
+    setStatus("OCR not loaded", "");
+    showToast("OCR library did not load. You can paste text and extract fields.");
     return;
   }
 
   try {
-    setStatus("画像補正中", "");
-    const preparedImage = await prepareImageForOcr(dataUrl);
-    setStatus("OCR解析中", "0%");
-    const result = await Tesseract.recognize(preparedImage, "jpn+eng", {
-      preserve_interword_spaces: "1",
-      logger(message) {
-        if (message.status === "recognizing text") {
-          elements.ocrProgress.textContent = `${Math.round(message.progress * 100)}%`;
-        }
-      },
-    });
-    const text = normalizeOcrText(result.data.text);
+    setStatus("Preparing image", "");
+    const images = await prepareImagesForOcr(dataUrl);
+    const results = [];
+    for (let i = 0; i < images.length; i += 1) {
+      setStatus("OCR running", `${i + 1}/${images.length}`);
+      results.push(await recognizeImage(images[i], i));
+    }
+    const best = results.sort((a, b) => b.score - a.score)[0];
+    const text = normalizeOcrText(best.text);
     elements.rawText.value = text;
     ensureDraftCard().rawText = text;
-    setStatus("OCR完了", "");
+    setStatus("OCR done", "");
     applyParsedText(text);
-  } catch (error) {
-    setStatus("OCR失敗", "");
-    showToast("OCRに失敗しました。明るい場所で名刺を大きく撮り直してください。");
+  } catch {
+    setStatus("OCR failed", "");
+    showToast("OCR failed. Retake the card brighter, larger, and as flat as possible.");
   }
 }
 
-function prepareImageForOcr(dataUrl) {
+function recognizeImage(image, index) {
+  const psm = index === 0 ? "6" : "11";
+  return Tesseract.recognize(image, "jpn+eng", {
+    preserve_interword_spaces: "1",
+    user_defined_dpi: "300",
+    tessedit_pageseg_mode: psm,
+    logger(message) {
+      if (message.status === "recognizing text") {
+        elements.ocrProgress.textContent = `${Math.round(message.progress * 100)}%`;
+      }
+    },
+  }).then((result) => {
+    const text = result.data.text || "";
+    return { text, score: scoreOcrText(text, result.data.confidence || 0) };
+  });
+}
+
+function prepareImagesForOcr(dataUrl) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => {
-      const scale = Math.min(2.4, Math.max(1.2, 2200 / Math.max(image.width, image.height)));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(image.width * scale);
-      canvas.height = Math.round(image.height * scale);
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = "high";
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-        const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.45 + 128));
-        data[i] = contrasted;
-        data[i + 1] = contrasted;
-        data[i + 2] = contrasted;
-      }
-      context.putImageData(imageData, 0, 0);
-      resolve(canvas.toDataURL("image/png"));
+      const maxSide = Math.max(image.width, image.height);
+      const scale = Math.min(3, Math.max(1, 2600 / maxSide));
+      const width = Math.round(image.width * scale);
+      const height = Math.round(image.height * scale);
+      resolve([
+        renderPreparedImage(image, width, height, "contrast"),
+        renderPreparedImage(image, width, height, "threshold"),
+      ]);
     };
     image.onerror = reject;
     image.src = dataUrl;
   });
+}
+
+function renderPreparedImage(image, width, height, mode) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  const imageData = context.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    const value = mode === "threshold" ? (gray > 178 ? 255 : 0) : Math.max(0, Math.min(255, (gray - 128) * 1.65 + 142));
+    data[i] = value;
+    data[i + 1] = value;
+    data[i + 2] = value;
+  }
+  context.putImageData(imageData, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+function scoreOcrText(text, confidence) {
+  const clean = normalizeOcrText(text);
+  const japaneseChars = (clean.match(/[\u3040-\u30ff\u4e00-\u9fff]/g) || []).length;
+  const usefulLines = clean.split(/\n/).filter((line) => cleanLine(line).length >= 2).length;
+  const hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(clean) ? 25 : 0;
+  const hasPhone = /\d{2,4}[-\s.]\d{2,4}[-\s.]\d{3,4}/.test(clean) ? 16 : 0;
+  const hasCompany = new RegExp(`(${jp.company}|Inc\\.?|Ltd\\.?|Co\\.?|Corporation|LLC)`, "i").test(clean) ? 24 : 0;
+  return confidence + japaneseChars * 2 + usefulLines * 5 + hasEmail + hasPhone + hasCompany;
 }
 
 function applyParsedText(text) {
@@ -189,53 +225,48 @@ function applyParsedText(text) {
 
   renderCompanyCandidates(parsed.companyCandidates);
   elements.rawText.value = text;
-  showToast(parsed.company ? "会社名候補を抽出しました。確認して保存してください。" : "OCR結果を抽出しました。会社名は候補から選んでください。");
+  showToast("OCR complete. Please choose/check company candidates before saving.");
 }
 
 function renderCompanyCandidates(candidates) {
   elements.companyCandidates.innerHTML = "";
-  candidates.slice(0, 5).forEach((candidate) => {
+  candidates.slice(0, 6).forEach((candidate) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "candidate-chip";
     button.textContent = candidate.text;
-    button.title = `会社名候補: ${candidate.text}`;
     button.addEventListener("click", () => {
       elements.company.value = candidate.text;
-      showToast("会社名を候補から入力しました。");
+      showToast("Company filled from candidate.");
     });
     elements.companyCandidates.append(button);
   });
 }
 
 function parseBusinessCard(text) {
-  const lines = normalizeOcrText(text)
-    .split(/\r?\n/)
-    .map(cleanLine)
-    .filter(Boolean);
+  const lines = normalizeOcrText(text).split(/\r?\n/).map(cleanLine).filter(Boolean);
   const joined = lines.join(" ");
   const email = joined.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? "";
   const website = findWebsite(lines);
   const phone = joined.match(/(?:\+?\d{1,3}[-\s.]*)?(?:\(?0\d{1,4}\)?[-\s.]*)?\d{2,4}[-\s.]\d{2,4}[-\s.]\d{3,4}/)?.[0] ?? "";
-  const address = lines.find((line) => /〒|都|道|府|県|市|区|町|丁目|番地|-\d/.test(line) && !line.includes("@")) ?? "";
-  const title = lines.find((line) => /(代表|取締役|部長|課長|主任|係長|Manager|Director|CEO|CTO|Sales|Marketing|Engineer)/i.test(line)) ?? "";
+  const address = lines.find((line) => new RegExp(`(${jp.address}|-\\d)`).test(line) && !line.includes("@")) ?? "";
+  const title = lines.find((line) => new RegExp(`(${jp.title}|Manager|Director|CEO|CTO|Sales|Marketing|Engineer)`, "i").test(line)) ?? "";
   const companyCandidates = findCompanyCandidates(lines, { email, phone, website, address, title });
   const company = companyCandidates[0]?.text ?? "";
   const companyConfidence = companyCandidates[0]?.score ?? 0;
   const name = findLikelyName(lines, { email, phone, website, address, company, title });
-
   return { name, company, companyConfidence, companyCandidates, title, email, phone, website, address };
 }
 
 function findWebsite(lines) {
-  const explicit = lines.find((line) => !line.includes("@") && /(?:https?:\/\/|www\.)[A-Z0-9.-]+\.[A-Z]{2,}(?:\/\S*)?/i.test(line));
-  if (explicit) return explicit.match(/(?:https?:\/\/|www\.)[A-Z0-9.-]+\.[A-Z]{2,}(?:\/\S*)?/i)?.[0] ?? "";
-  return "";
+  const line = lines.find((item) => !item.includes("@") && /(?:https?:\/\/|www\.)[A-Z0-9.-]+\.[A-Z]{2,}(?:\/\S*)?/i.test(item));
+  return line?.match(/(?:https?:\/\/|www\.)[A-Z0-9.-]+\.[A-Z]{2,}(?:\/\S*)?/i)?.[0] ?? "";
 }
 
 function findCompanyCandidates(lines, known) {
-  const companyWords = /(株式会社|有限会社|合同会社|一般社団法人|公益社団法人|医療法人|学校法人|Inc\.?|Ltd\.?|Co\.?|Corporation|Company|LLC|GmbH|Group|Holdings)/i;
-  const weakCompanyWords = /(事務所|研究所|制作|デザイン|システム|ソリューション|サービス|商事|工業|産業|不動産|クリニック|大学|学院|銀行|協会|センター|LAB|STUDIO|DESIGN|SYSTEM|SOLUTION)/i;
+  const companyWords = new RegExp(`(${jp.company}|Inc\\.?|Ltd\\.?|Co\\.?|Corporation|Company|LLC|GmbH|Group|Holdings)`, "i");
+  const weakCompanyWords = new RegExp(`(${jp.weakCompany}|LAB|STUDIO|DESIGN|SYSTEM|SOLUTION)`, "i");
+  const titleWords = new RegExp(`(${jp.title}|Manager|Director|CEO|CTO)`, "i");
   const rejectedValues = new Set(Object.values(known).filter(Boolean));
 
   return lines
@@ -243,16 +274,16 @@ function findCompanyCandidates(lines, known) {
       const text = cleanLine(line);
       let score = 0;
       if (!text || rejectedValues.has(text)) return null;
-      if (text.includes("@") || /TEL|FAX|携帯|Mobile|Phone|E-mail|Email/i.test(text)) return null;
+      if (text.includes("@") || /TEL|FAX|Mobile|Phone|E-mail|Email/i.test(text)) return null;
       if (/https?:|www\.|^\d+$/.test(text)) return null;
-      if (companyWords.test(text)) score += 10;
-      if (weakCompanyWords.test(text)) score += 4;
+      if (companyWords.test(text)) score += 12;
+      if (weakCompanyWords.test(text)) score += 5;
       if (/[A-Z][A-Z0-9&., -]{2,}/.test(text)) score += 2;
       if (/[\u4e00-\u9fff]{2,}/.test(text)) score += 2;
-      if (index <= 3) score += 3;
-      if (text.length >= 4 && text.length <= 34) score += 2;
+      if (index <= 4) score += 3;
+      if (text.length >= 3 && text.length <= 38) score += 2;
       if (/\d{3,}/.test(text)) score -= 4;
-      if (/(代表|取締役|部長|課長|主任|Manager|Director|CEO|CTO)/i.test(text)) score -= 5;
+      if (titleWords.test(text)) score -= 5;
       return score > 1 ? { text, score } : null;
     })
     .filter(Boolean)
@@ -261,17 +292,18 @@ function findCompanyCandidates(lines, known) {
 
 function findLikelyName(lines, known) {
   const rejected = new Set(Object.values(known).filter(Boolean));
+  const companyWords = new RegExp(`(${jp.company}|Inc\\.?|Ltd\\.?|Co\\.?)`, "i");
   const candidates = lines.filter((line) => {
     if (rejected.has(line)) return false;
     if (line.includes("@") || /https?:|www\.|\d{3,}/i.test(line)) return false;
-    if (/(株式会社|有限会社|合同会社|Inc\.?|Ltd\.?|〒|TEL|FAX|Mail|Email)/i.test(line)) return false;
+    if (companyWords.test(line) || /TEL|FAX|Mail|Email/i.test(line)) return false;
     return line.length >= 2 && line.length <= 28;
   });
   return candidates[0] ?? "";
 }
 
 function normalizeOcrText(text) {
-  return text
+  return String(text)
     .replace(/[|｜]/g, "I")
     .replace(/[―–—]/g, "-")
     .replace(/[　\t]+/g, " ")
@@ -280,10 +312,7 @@ function normalizeOcrText(text) {
 }
 
 function cleanLine(line) {
-  return line
-    .replace(/\s+/g, " ")
-    .replace(/^[・:：,，.。-\s]+|[・:：,，.。-\s]+$/g, "")
-    .trim();
+  return String(line).replace(/\s+/g, " ").replace(/^[・:：,，.。-\s]+|[・:：,，.。-\s]+$/g, "").trim();
 }
 
 function saveActiveCard() {
@@ -295,7 +324,7 @@ function saveActiveCard() {
   card.updatedAt = new Date().toISOString();
   persist();
   render();
-  showToast("名刺を保存しました。");
+  showToast("Saved.");
 }
 
 function deleteActiveCard() {
@@ -303,23 +332,17 @@ function deleteActiveCard() {
   const card = cards.find((item) => item.id === activeId);
   if (!card) return;
   const hasContent = fields.some((field) => card[field]) || card.image || card.rawText;
-  if (hasContent && !window.confirm("この名刺を削除しますか？")) return;
+  if (hasContent && !window.confirm("Delete this card?")) return;
   cards = cards.filter((item) => item.id !== activeId);
   activeId = cards[0]?.id ?? null;
   persist();
   render();
   activeId ? loadCard(activeId) : resetForm();
-  showToast("削除しました。");
+  showToast("Deleted.");
 }
 
 function createBlankCard() {
-  const card = {
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    rawText: "",
-    image: "",
-  };
+  const card = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), rawText: "", image: "" };
   fields.forEach((field) => {
     card[field] = "";
   });
@@ -328,7 +351,7 @@ function createBlankCard() {
   persist();
   resetForm();
   render();
-  showToast("新しい名刺を作成しました。");
+  showToast("New card created.");
 }
 
 function ensureDraftCard() {
@@ -364,26 +387,20 @@ function resetForm() {
 
 function render() {
   const query = elements.searchInput.value.trim().toLowerCase();
-  const visibleCards = cards.filter((card) => {
-    const haystack = fields.map((field) => card[field]).join(" ").toLowerCase();
-    return haystack.includes(query);
-  });
+  const visibleCards = cards.filter((card) => fields.map((field) => card[field]).join(" ").toLowerCase().includes(query));
   elements.cardList.innerHTML = "";
   visibleCards.forEach((card) => {
     const item = document.createElement("button");
     item.type = "button";
     item.className = `list-item${card.id === activeId ? " active" : ""}`;
-    item.innerHTML = `
-      <strong>${escapeHtml(card.name || "氏名未入力")}</strong>
-      <span>${escapeHtml(card.company || card.email || "詳細未入力")}</span>
-    `;
+    item.innerHTML = `<strong>${escapeHtml(card.name || "No name")}</strong><span>${escapeHtml(card.company || card.email || "No details")}</span>`;
     item.addEventListener("click", () => loadCard(card.id));
     elements.cardList.append(item);
   });
   if (!visibleCards.length) {
     const empty = document.createElement("div");
     empty.className = "list-item";
-    empty.innerHTML = "<strong>該当なし</strong><span>検索条件を変えてください</span>";
+    empty.innerHTML = "<strong>No cards</strong><span>Try another search</span>";
     elements.cardList.append(empty);
   }
   elements.totalCount.textContent = String(cards.length);
@@ -416,17 +433,11 @@ function showToast(message) {
 }
 
 function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => {
-    const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" };
-    return map[char];
-  });
+  return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
 }
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
-
-  navigator.serviceWorker.register("sw.js").catch(() => {
-    // The app still works without offline caching.
-  });
+  navigator.serviceWorker.register("sw.js").catch(() => {});
 }

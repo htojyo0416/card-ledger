@@ -66,12 +66,14 @@
             <div class="capture-actions">
               <button id="startCameraButton" class="secondary" type="button">カメラ起動</button>
               <button id="captureButton" class="primary" type="button" disabled>撮影して解析</button>
+              <label class="primary file-button" for="imageInput">高精度カメラで撮影</label>
             </div>
+            <p class="capture-hint">スマホでは「高精度カメラで撮影」がおすすめです。端末の純正カメラ画像を使うため、OCR精度が上がります。</p>
           </div>
 
           <div id="uploadPane" class="input-pane">
             <label class="drop-zone" for="imageInput">
-              <input id="imageInput" type="file" accept="image/*" />
+              <input id="imageInput" type="file" accept="image/*" capture="environment" />
               <span>画像を選択</span>
               <small>JPG / PNG / HEIC対応ブラウザではHEICも可</small>
             </label>

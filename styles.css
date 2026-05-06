@@ -282,6 +282,9 @@ video {
 .primary,
 .secondary,
 .danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 40px;
   padding: 0 15px;
   border-radius: 8px;
@@ -307,6 +310,16 @@ video {
   color: var(--danger);
   border: 1px solid rgba(180, 35, 24, 0.25);
   background: #fff8f7;
+}
+
+.file-button {
+  cursor: pointer;
+  text-align: center;
+}
+
+.capture-hint {
+  color: var(--muted);
+  font-size: 0.86rem;
 }
 
 button:disabled {
