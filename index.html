@@ -53,7 +53,7 @@
           <div class="panel-title">
             <div>
               <h2>読み取り</h2>
-              <p>写真を撮るか、画像をアップロードしてください。</p>
+              <p>スマホでは高精度カメラ撮影、PCでは画像アップロードがおすすめです。</p>
             </div>
             <div class="segmented" role="tablist" aria-label="入力方法">
               <button id="cameraTab" class="active" type="button">カメラ</button>
@@ -64,17 +64,17 @@
           <div id="cameraPane" class="input-pane active">
             <video id="cameraPreview" autoplay playsinline muted></video>
             <div class="capture-actions">
-              <button id="startCameraButton" class="secondary" type="button">カメラ起動</button>
-              <button id="captureButton" class="primary" type="button" disabled>撮影して解析</button>
               <label class="primary file-button" for="imageInput">高精度カメラで撮影</label>
+              <button id="startCameraButton" class="secondary" type="button">カメラ起動</button>
+              <button id="captureButton" class="secondary" type="button" disabled>撮影して解析</button>
             </div>
-            <p class="capture-hint">スマホでは「高精度カメラで撮影」がおすすめです。端末の純正カメラ画像を使うため、OCR精度が上がります。</p>
+            <p class="capture-hint">「高精度カメラで撮影」は端末の純正カメラ画像を使うため、OCR精度が上がります。</p>
           </div>
 
           <div id="uploadPane" class="input-pane">
             <label class="drop-zone" for="imageInput">
               <input id="imageInput" type="file" accept="image/*" capture="environment" />
-              <span>画像を選択</span>
+              <span>画像を選択・撮影</span>
               <small>JPG / PNG / HEIC対応ブラウザではHEICも可</small>
             </label>
           </div>
@@ -97,7 +97,7 @@
           <div class="panel-title">
             <div>
               <h2>名刺情報</h2>
-              <p>抽出結果を確認して保存します。</p>
+              <p>会社名は候補を確認してから保存してください。</p>
             </div>
             <div class="detail-actions">
               <button id="deleteButton" class="danger" type="button">削除</button>
